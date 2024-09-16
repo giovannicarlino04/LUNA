@@ -1,9 +1,30 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.Json;
 using System.Windows.Forms;
+using OpenTK;
 
 namespace LUNA
 {
+    [Serializable]
+    public class Scene
+    {
+        public Camera Camera { get; set; }
+        public List<SceneObject> Objects { get; set; }
+    }
+
+    [Serializable]
+    public class SceneObject
+    {
+        public string Name { get; set; }
+        public Vector3 Position { get; set; }
+        public Vector3 Rotation { get; set; }
+        public Vector3 Scale { get; set; }
+    }
+
     public partial class Form1 : Form
     {
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -12,12 +33,11 @@ namespace LUNA
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
 
-
         private Camera camera;
         private OpenGLControl openGLControl;
         private Timer renderTimer;
         private DebugConsoleForm debugConsole;
-        private bool isMouseCaptured;
+
         public Form1()
         {
             InitializeComponent();
@@ -25,10 +45,7 @@ namespace LUNA
             InitializeRenderTimer();
             InitializeCamera();
             ConfigureForm();
-            this.MouseMove += OnMouseMove;
             this.KeyDown += OnKeyDown;
-            this.MouseDown += OnMouseDown;
-            this.MouseUp += OnMouseUp;
 
             // Initialize the debug console
             debugConsole = new DebugConsoleForm();
@@ -37,7 +54,7 @@ namespace LUNA
 
         private void ConfigureForm()
         {
-
+            // Form configuration code here (if any)
         }
 
         private void InitializeOpenGLControl()
@@ -60,7 +77,7 @@ namespace LUNA
         private void InitializeCamera()
         {
             // Initialize the camera
-            camera = new Camera(new OpenTK.Vector3(0.0f, 0.0f, 3.0f));
+            camera = new Camera(new Vector3(0.0f, 0.0f, 3.0f));
         }
 
         private void RenderTimer_Tick(object sender, EventArgs e)
@@ -68,54 +85,6 @@ namespace LUNA
             // Trigger the rendering of the OpenGL scene
             openGLControl.Render(camera);
         }
-
-        private void OnMouseMove(object sender, MouseEventArgs e)
-        {
-            if (!isMouseCaptured) return;
-
-            // Calculate offsets
-            float xOffset = e.X - (Width / 2.0f);
-            float yOffset = (Height / 2.0f) - e.Y;
-
-            // Process mouse movement
-            camera.ProcessMouseMovement(xOffset, yOffset);
-
-            // Recenter the mouse cursor
-            Cursor.Position = this.PointToScreen(new System.Drawing.Point(Width / 2, Height / 2));
-
-            // Debug information
-            debugConsole.WriteLine($"Mouse moved: X={e.X}, Y={e.Y}");
-        }
-        private void OnMouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                Cursor.Hide(); // Hide the cursor
-                isMouseCaptured = true;
-
-                // Capture mouse input
-                SetCapture(this.Handle);
-
-                // Recenter the cursor
-                Cursor.Position = this.PointToScreen(new System.Drawing.Point(Width / 2, Height / 2));
-            }
-        }
-
-        private void OnMouseUp(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                Cursor.Show(); // Show the cursor
-                isMouseCaptured = false;
-
-                // Release mouse input capture
-                ReleaseCapture();
-            }
-        }
-
-
-
-
 
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
@@ -140,9 +109,77 @@ namespace LUNA
             debugConsole.WriteLine($"Key down: {e.KeyCode}");
         }
 
-        private void exitToolStripMenuItem_Click(object sender, EventArgs e)
+        private void exitToolStripMenuItem_Click_1(object sender, EventArgs e)
         {
             this.Close();
+        }
+
+        private void saveSceneToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            SaveFileDialog saveScene = new SaveFileDialog();
+            saveScene.Filter = "Luna Scene File | *.lns";
+
+            if (saveScene.ShowDialog() == DialogResult.OK)
+            {
+                // Create a scene object
+                Scene scene = new Scene
+                {
+                    Camera = camera,
+                    Objects = new List<SceneObject>() // Populate with your scene objects
+                };
+
+                // Choose between Binary or JSON serialization
+                SaveSceneAsJson(saveScene.FileName, scene);
+                // SaveScene(saveScene.FileName, scene); // Use binary serialization instead
+            }
+        }
+
+        private void openSceneToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openScene = new OpenFileDialog();
+            openScene.Filter = "Luna Scene File | *.lns";
+
+            if (openScene.ShowDialog() == DialogResult.OK)
+            {
+                // Load the scene
+                Scene scene = LoadSceneFromJson(openScene.FileName);
+                // Scene scene = LoadScene(openScene.FileName); // Use binary deserialization instead
+
+                // Restore the camera and objects
+                camera = scene.Camera;
+                // Populate your scene objects in the OpenGLControl
+                // ...
+            }
+        }
+
+        private void SaveScene(string filePath, Scene scene)
+        {
+            using (FileStream fs = new FileStream(filePath, FileMode.Create))
+            {
+                BinaryFormatter formatter = new BinaryFormatter();
+                formatter.Serialize(fs, scene);
+            }
+        }
+
+        private Scene LoadScene(string filePath)
+        {
+            using (FileStream fs = new FileStream(filePath, FileMode.Open))
+            {
+                BinaryFormatter formatter = new BinaryFormatter();
+                return (Scene)formatter.Deserialize(fs);
+            }
+        }
+
+        private void SaveSceneAsJson(string filePath, Scene scene)
+        {
+            string jsonString = JsonSerializer.Serialize(scene);
+            File.WriteAllText(filePath, jsonString);
+        }
+
+        private Scene LoadSceneFromJson(string filePath)
+        {
+            string jsonString = File.ReadAllText(filePath);
+            return JsonSerializer.Deserialize<Scene>(jsonString);
         }
     }
 }
